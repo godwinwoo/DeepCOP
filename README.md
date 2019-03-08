@@ -14,7 +14,8 @@ Uncompress these files in the same folder.
 3. Use [get_xy.py](get_xy.py) or [get_xy_phase2.py](get_xy_phase2.py) to collect the training data and labels.
 
 4. Use [internal_validation.py](internal_validation.py) to do 10 fold cross validation on the training data.
-    * Save the output of this step to a file. You will need to use the max fscore cutoff values for step 5. 
+    * This step will save the trained models to SavedModels folder as well as the cutoff values. 
+    The cutoff values are saved when all 10 folds are evaluated. The cutoffs are used in step 5.  
 
 5. Use [external_validation.py](external_validation.py) to evaluate predictions from step 3 trained models on external RNA-Seq values.
-    * When evaluating the predictions, use the cutoff values from the output in step 4.
+    * When evaluating the predictions, cutoff values from step 4 will be used.

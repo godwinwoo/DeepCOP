@@ -133,15 +133,13 @@ def print_stats(y_true, param, dir, predictions, cutoff=None):
     val_stats = all_stats(np.asarray(y_true, dtype='float32'), predictions[:, 1], cutoff)
     label = dir + "regulation " + str(param)
     print(label)
-    print('All stats columns | AUC | Recall | Specificity | Number of Samples | Precision | Max F Cutoff')
+    print('All stats columns | AUC | Recall | Specificity | Number of Samples | Precision | Max F Cutoff | Max F Score')
     print('All stats val:', ['{:6.3f}'.format(val) for val in val_stats])
     print_acc(label, np.asarray(y_true, dtype='float32'), predictions)
 
 
-def compare_predictions_with_rnaseq():
+def compare_predictions_with_rnaseq(up_model_filename, down_model_filename, upcutoff, downcutoff):
     # get the predictions np array ordered by drugs then genes
-    up_model_filename = "SavedModels/HT29_Up_5p_1"
-    down_model_filename = "SavedModels/HT29_Down_5p_1"
     up_predictions, down_predictions, drugs, genes = get_predictions(up_model_filename, down_model_filename)
 
     # get the rnaseq data into np array
@@ -157,16 +155,27 @@ def compare_predictions_with_rnaseq():
             rnaseq_data[drug][gene] = padj
 
     significance_level = 0.05
-    up_max_cutoff = 0.5  # use the max fscore cutoff value obtained from training the model
-    down_max_cutoff = 0.5  # use the max fscore cutoff value obtained from training the model
-
     print("significance level", significance_level)
 
     up_true_float, down_true_float, up_true_int, down_true_int = \
         get_true_from_padj(drugs, genes, lincs_to_rnaseq_gene, rnaseq_data, significance_level)
 
-    print_stats(up_true_int, significance_level, "up", up_predictions, up_max_cutoff)
-    print_stats(down_true_int, significance_level, "down", down_predictions, down_max_cutoff)
+    print_stats(up_true_int, significance_level, "up", up_predictions, upcutoff)
+    print_stats(down_true_int, significance_level, "down", down_predictions, downcutoff)
 
 
-compare_predictions_with_rnaseq()
+def get_average_of_10_models():
+    up_file_prefix = "SavedModels/LNCAP_Up_5p_"
+    down_file_prefix = "SavedModels/LNCAP_Down_5p_"
+    up_cutoffs = np.load(up_file_prefix + "cutoffs.npz")['arr_0']
+    down_cutoffs = np.load(down_file_prefix + "cutoffs.npz")['arr_0']
+
+    for i in range(0, 10):
+        up_model_filename = up_file_prefix + str(i+1)
+        down_model_filename = down_file_prefix + str(i+1)
+        upcutoff = up_cutoffs[i]
+        downcutoff = down_cutoffs[i]
+        compare_predictions_with_rnaseq(up_model_filename, down_model_filename, upcutoff, downcutoff)
+
+
+get_average_of_10_models()

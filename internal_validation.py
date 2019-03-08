@@ -66,7 +66,7 @@ def do_validation(data, labels, model_file_prefix):
     sum_prec = 0
     sum_fscore = 0
     sum_ef = 0
-
+    cutoffs = []
     for train_indexes, test_indexes in kf.split(data):
         count += 1
         print("TRAIN:", train_indexes, "TEST:", test_indexes)
@@ -115,6 +115,8 @@ def do_validation(data, labels, model_file_prefix):
         total = int(tokens[20])
         ef = precision / (support/total)
 
+        cutoffs.append(float(test_stats[5]))
+
         # get average
         sum_auc += test_stats[0]
         sum_prec += test_stats[4]
@@ -125,6 +127,7 @@ def do_validation(data, labels, model_file_prefix):
               'prec', sum_prec / count,
               'fscore', sum_fscore / count,
               'enrichment', sum_ef / count)
+    np.savez(model_file_prefix + '_cutoffs', np.asarray(cutoffs))
 
 def load_and_validate():
     # target_cell_names = ['VCAP', 'A549', 'A375', 'PC3', 'MCF7', 'HT29', 'LNCAP']
