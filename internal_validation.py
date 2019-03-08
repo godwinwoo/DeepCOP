@@ -128,7 +128,7 @@ def do_validation(data, labels, model_file_prefix):
 
 def load_and_validate():
     # target_cell_names = ['VCAP', 'A549', 'A375', 'PC3', 'MCF7', 'HT29', 'LNCAP']
-    target_cell_names = ['HT29']  # choose the cell line(s) to do x10
+    target_cell_names = ['LNCAP']  # choose the cell line(s) to do x10
 
     load_data_folder_path = "TrainData/"
     save_models_folder_path = "SavedModels/"
