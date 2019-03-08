@@ -203,13 +203,12 @@ for target_cell_name in target_cell_names:
         print("Sample Size:", n_samples, "Drugs tested:", num_drugs / gene_count_data_limit)
 
         # save the data to be loaded and used multiple times if needed
+        model_file_prefix = save_xy_path + target_cell_name + '_' + direction + '_' + str(percentile_down) + 'p'
+        save_file = model_file_prefix + "_X"
+        print("saved", save_file)
+        np.savez(save_file, npX)
+
         for direction in ["Down", "Up"]:
-            model_file_prefix = save_xy_path + target_cell_name + '_' + direction + '_' + str(percentile_down) + 'p'
-
-            save_file = model_file_prefix + "_X"
-            print("saved", save_file)
-            np.savez(save_file, npX)
-
             save_file = model_file_prefix + "_Y_class"
             print("saved", save_file)
             npY = npY_class_up if direction == "up" else npY_class_down

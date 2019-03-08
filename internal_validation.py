@@ -10,7 +10,7 @@ from keras.callbacks import History, EarlyStopping
 from sklearn.model_selection import train_test_split, KFold
 import sklearn.metrics as metrics
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"  # choose the gpu to use in multi gpu system
 
 
 def save_model(model, file_prefix, run_number):
@@ -65,6 +65,7 @@ def do_validation(data, labels, model_file_prefix):
     count = 0
     sum_prec = 0
     sum_fscore = 0
+    sum_ef = 0
 
     for train_indexes, test_indexes in kf.split(data):
         count += 1
@@ -107,30 +108,40 @@ def do_validation(data, labels, model_file_prefix):
         print('All stats train:', ['{:6.3f}'.format(val) for val in train_stats])
         print('All stats test:', ['{:6.3f}'.format(val) for val in test_stats])
 
+        # get enrichment factor
+        precision = float(test_stats[4])
+        tokens = report.split()
+        support = int(tokens[13])
+        total = int(tokens[20])
+        ef = precision / (support/total)
+
         # get average
         sum_auc += test_stats[0]
         sum_prec += test_stats[4]
         sum_fscore += test_stats[6]
+        sum_ef += ef
 
-        print("running kfold auc", count, sum_auc / count, 'prec', sum_prec / count, 'fscore', sum_fscore / count)
-    print("final kfold auc", sum_auc / n_splits, 'prec', sum_prec / count, 'fscore', sum_fscore / count)
-
+        print("running kfold auc", count, sum_auc / count,
+              'prec', sum_prec / count,
+              'fscore', sum_fscore / count,
+              'enrichment', sum_ef / count)
 
 def load_and_validate():
     # target_cell_names = ['VCAP', 'A549', 'A375', 'PC3', 'MCF7', 'HT29', 'LNCAP']
-    target_cell_names = ['HT29']
+    target_cell_names = ['HT29']  # choose the cell line(s) to do x10
 
     load_data_folder_path = "TrainData/"
     save_models_folder_path = "SavedModels/"
     percentiles = [5]
     for target_cell_name in target_cell_names:
-        for direction in ["Down", "Up"]:
-            for percentile_down in percentiles:
+        for percentile_down in percentiles:
+            file_suffix = target_cell_name + '_' + str(percentile_down) + 'p'
+            npX = np.load(load_data_folder_path + file_suffix + "_X.npz")['arr_0']
+            for direction in ["Down", "Up"]:
                 file_suffix = target_cell_name + '_' + direction + '_' + str(percentile_down) + 'p'
                 model_file_prefix = save_models_folder_path + file_suffix
                 print('load location', load_data_folder_path)
                 print('save location', model_file_prefix)
-                npX = np.load(load_data_folder_path + file_suffix + "_X.npz")['arr_0']
                 npY_class = np.load(load_data_folder_path + file_suffix + "_Y_class.npz")['arr_0']
                 do_validation(npX, npY_class, model_file_prefix)
 
