@@ -1,218 +1,137 @@
 import datetime
-import json
-import time
 import numpy as np
-from Helpers.data_loader import get_feature_dict, load_gene_expression_data, printProgressBar
+from Helpers.callbacks import NEpochLogger
+from Helpers.utilities import all_stats
+from keras.models import Sequential
+from keras.layers import Dense, Dropout, Activation
+from keras.utils import np_utils
+from keras.layers.normalization import BatchNormalization
+from keras.callbacks import History, EarlyStopping
+from sklearn.model_selection import train_test_split, KFold
+import sklearn.metrics as metrics
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "5"
-
-start_time = time.time()
-gene_count_data_limit = 978
-# target_cell_names = ['VCAP', 'A549', 'A375', 'PC3', 'MCF7', 'HT29']
-target_cell_names = ['MCF7']
-test_blind = True
-save_xy_path = "TrainData/"
-LINCS_data_path = "/data/datasets/gwoo/L1000/LDS-1191/Data/"
-data_path = "Data/"
-gap_factors = [0.0]
-significance_levels = [5]
-dosage = 10
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 
-def find_nth(haystack, needle, n):
-    start = haystack.find(needle)
-    while start >= 0 and n > 1:
-        start = haystack.find(needle, start+len(needle))
-        n -= 1
-    return start
+def save_model(model, file_prefix, run_number):
+    file_name = file_prefix + '_' + str(run_number)
+    # serialize model to JSON
+    model_json = model.to_json()
+    with open(file_name + ".json", "w") as json_file:
+        json_file.write(model_json)
+    # serialize weights to HDF5
+    model.save_weights(file_name + ".h5")
+    print("Saved model", file_name)
 
 
-def get_gene_id_dict():
-    lm_genes = json.load(open('Data/landmark_genes.json'))
-    dict = {}
-    for lm_gene in lm_genes:
-        dict[lm_gene['entrez_id']] = lm_gene['gene_symbol']
-    return dict
+def get_model(n_classes, neuron_count):
+    dropout = 0.2
+    activation_input = 'selu'
+    activation = 'relu'
+    activation_output = 'softmax'
+
+    model = Sequential()
+    # input and first layer
+    model.add(Dense(neuron_count, input_shape=(neuron_count,)))
+    model.add(BatchNormalization())
+    model.add(Activation(activation_input))
+    model.add(Dropout(dropout))
+
+    # 2nd layer
+    model.add(Dense(neuron_count))
+    model.add(BatchNormalization())
+    model.add(Activation(activation))
+    model.add(Dropout(dropout))
+
+    # output later
+    model.add(Dense(n_classes))
+    model.add(BatchNormalization())
+    model.add(Activation(activation_output))
+    model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
+    return model
 
 
-def get_class_vote(pert_list, bottom_threshold, top_threshold):
-    votes = [0, 0, 0, 0]
-    # list of perts
-    for pert in pert_list:
-        if pert > top_threshold:
-            votes[3] += 1  # upregulation
-        elif pert < bottom_threshold:
-            votes[1] += 1  # downregulation
-        else:
-            votes[2] += 1  # not regulated
-    highest_vote_class = np.argmax(votes)
+def do_validation(data, labels, model_file_prefix):
+    nb_classes = 2
+    d = data.shape[1]
+    neuron_count = int(d)
+    nb_epoch = 10000
+    n_splits = 10
+    batch_size = 2**12
 
-    is_tie = False  # check if there's a tie (another class with the same number of votes)
-    for i in range(0, len(votes)):
-        if i == highest_vote_class:
-            continue
-        if votes[i] == votes[highest_vote_class]:
-            is_tie = True
-            break
-    if is_tie:
-        return 0
-    else:
-        return highest_vote_class
+    labels = np_utils.to_categorical(labels, nb_classes)
+    kf = KFold(n_splits=n_splits, shuffle=True)
+    sum_auc = 0
+    count = 0
+    sum_prec = 0
+    sum_fscore = 0
+
+    for train_indexes, test_indexes in kf.split(data):
+        count += 1
+        print("TRAIN:", train_indexes, "TEST:", test_indexes)
+
+        # take half of the test data as validation
+        X_train = data[train_indexes]
+        Y_train = labels[train_indexes]
+        val_indexes, test_indexes = train_test_split(test_indexes, train_size=0.5, test_size=0.5, shuffle=True)
+        X_val = data[val_indexes]
+        Y_val = labels[val_indexes]
+        X_test = data[test_indexes]
+        Y_test = labels[test_indexes]
+
+        model = get_model(nb_classes, neuron_count)
+
+        # train the model
+        history = History()
+        early_stopping = EarlyStopping(monitor='val_loss', min_delta=0, patience=5, verbose=1, mode='auto')
+        out_epoch = NEpochLogger(display=5)
+        model.fit(X_train, Y_train, batch_size=batch_size, epochs=nb_epoch,
+                  verbose=0, validation_data=(X_val, Y_val), callbacks=[history, early_stopping, out_epoch],
+                  class_weight='auto')
+        save_model(model, model_file_prefix, count)
+
+        # get results and report
+        y_pred_train = model.predict_proba(X_train)
+        y_pred_test = model.predict_proba(X_test)
+
+        # report accuracy
+        y_pred = np.argmax(y_pred_test, axis=1)
+        y_true = np.argmax(Y_test, axis=1)
+        report = metrics.classification_report(y_true, y_pred)
+        print("Test Report", report)
+
+        # report auc
+        train_stats = all_stats(Y_train[:, 1], y_pred_train[:, 1])
+        test_stats = all_stats(Y_test[:, 1], y_pred_test[:, 1])
+        print('All stats columns | AUC | Recall | Specificity | Number of Samples | Precision | Max F Cutoff | Max F score')
+        print('All stats train:', ['{:6.3f}'.format(val) for val in train_stats])
+        print('All stats test:', ['{:6.3f}'.format(val) for val in test_stats])
+
+        # get average
+        sum_auc += test_stats[0]
+        sum_prec += test_stats[4]
+        sum_fscore += test_stats[6]
+
+        print("running kfold auc", count, sum_auc / count, 'prec', sum_prec / count, 'fscore', sum_fscore / count)
+    print("final kfold auc", sum_auc / n_splits, 'prec', sum_prec / count, 'fscore', sum_fscore / count)
 
 
-# get the dictionaries
-print(datetime.datetime.now(), "Loading drug and gene features")
-drug_features_dict = get_feature_dict('Data/morgan_2048.csv')
-gene_features_dict = get_feature_dict('Data/go_fingerprints.csv')
-cell_name_to_id_dict = get_feature_dict(LINCS_data_path + 'Cell_Line_Metadata.txt', '\t', 2)
-experiments_dose_dict = get_feature_dict(LINCS_data_path + 'GSE92742_Broad_LINCS_sig_info.txt', '\t', 0)
-gene_id_dict = get_gene_id_dict()
+def load_and_validate():
+    # target_cell_names = ['VCAP', 'A549', 'A375', 'PC3', 'MCF7', 'HT29', 'LNCAP']
+    target_cell_names = ['HT29']
 
-lm_gene_entrez_ids = []
-for gene in gene_id_dict:
-    lm_gene_entrez_ids.append(gene)
-
-print("Loading gene expressions from gctx")
-level_5_gctoo = load_gene_expression_data(LINCS_data_path + "GSE92742_Broad_LINCS_Level5_COMPZ.MODZ_n473647x12328.gctx",
-                                          lm_gene_entrez_ids)
-length = len(level_5_gctoo.col_metadata_df.index)
-
-for target_cell_name in target_cell_names:
-    target_cell_id = cell_name_to_id_dict[target_cell_name][0]
-
-    cell_X = {}  # stores rows used in X
-    cell_Y = {}  # stores the highest perturbation for that experiment
-    cell_Y_gene_ids = []
-    cell_drugs_counts = 0
-    repeat_X = {}
-
-    print("Loading experiments")
-    # For every experiment
-    for i in range(0, length):
-        printProgressBar(i, length, prefix='Load experiments progress')
-        col_name = level_5_gctoo.col_metadata_df.index[i]
-        column = level_5_gctoo.data_df[col_name]
-
-        # parse the time
-        start = col_name.rfind("_")
-        end = find_nth(col_name, ":", 1)
-        exposure_time = col_name[start + 1:end]
-        if exposure_time != "24H":  # column counts: 6h 95219, 24h 109287, 48h 58, 144h 1
-            continue
-
-        # get drug features
-        col_name_key = col_name[2:-1]
-        if col_name_key not in experiments_dose_dict:
-            continue
-        experiment_data = experiments_dose_dict[col_name_key]
-        drug_id = experiment_data[0]
-        if drug_id not in drug_features_dict:
-            continue
-        drug_features = drug_features_dict[drug_id]
-
-        # parse the dosage unit and value
-        dose_unit = experiment_data[5]
-        if dose_unit != 'µM':
-            # remove any dosages that are not 'µM'. Want to standardize the dosages.
-            # column counts: -666 17071, % 2833, uL 238987, uM 205066, ng 1439, ng / uL 2633, ng / mL 5625
-            continue
-        dose_amt = float(experiment_data[4])
-        if dose_amt < dosage - 0.1 or dose_amt > dosage + 0.1:  # 10µM +/- 0.1
-            continue
-
-        # parse the cell name
-        start = find_nth(col_name, "_", 1)
-        end = find_nth(col_name, "_", 2)
-        cell_name = col_name[start + 1:end]
-        if cell_name != target_cell_name:
-            continue
-
-        if cell_name not in cell_name_to_id_dict:
-            continue
-        cell_id = cell_name_to_id_dict[cell_name][0]
-
-        for gene_id in lm_gene_entrez_ids:
-            gene_symbol = gene_id_dict[gene_id]
-
-            if gene_symbol not in gene_features_dict:
-                continue
-
-            pert = column[gene_id].astype('float16')
-            # repeat key is used to find the largest perturbation for similar experiments and filter out the rest
-            repeat_key = drug_id + "_" + gene_id
-
-            if repeat_key not in cell_X:
-                cell_X[repeat_key] = drug_features + gene_features_dict[gene_symbol]
-                cell_Y[repeat_key] = []
-                cell_Y_gene_ids.append(gene_id)
-                cell_drugs_counts += 1
-            cell_Y[repeat_key].append(pert)
-
-    elapsed_time = time.time() - start_time
-    print(datetime.datetime.now(), "Time to load data:", elapsed_time)
-
-    # at this point all the perturbation values are stored in cell_Y
-    # now we want to determine the perturbation classes
-
-    gene_cutoffs_down = {}
-    gene_cutoffs_up = {}
-    for percentile_down in significance_levels:
-        percentile_up = 100 - percentile_down
-
-        # get all the global gene_specific_cutoffs:
-        prog_ctr = 0
-        for gene_id in lm_gene_entrez_ids:
-            row = level_5_gctoo.data_df.loc[gene_id, :].values
-            prog_ctr += 1
-            printProgressBar(prog_ctr, gene_count_data_limit, prefix='Storing percentile cutoffs')
-            gene_cutoffs_down[gene_id] = np.percentile(row, percentile_down)
-            gene_cutoffs_up[gene_id] = np.percentile(row, percentile_up)
-
-        # get voting class
-        print(datetime.datetime.now(), "Converting dictionary values to numpy array, count", str(len(cell_X)))
-        npX = np.asarray(list(cell_X.values()), dtype='float16')
-        y_pert_lists = np.asarray(list(cell_Y.values()))
-        n_samples = len(y_pert_lists)
-        npY_class_down = np.zeros(n_samples, dtype=int)
-        npY_class_up = np.zeros(n_samples, dtype=int)
-        npY_gene_ids = np.asarray(cell_Y_gene_ids)
-
-        prog_ctr = 0
-        combined_locations = []
-        combined_test_locations = []
-        for gene_id in lm_gene_entrez_ids:  # this section is for gene specific class cutoffs
-            prog_ctr += 1
-            printProgressBar(prog_ctr, gene_count_data_limit, prefix='Marking positive pertubations')
-            gene_locations = np.where(npY_gene_ids == gene_id)
-            class_cut_off_down = gene_cutoffs_down[gene_id]
-            class_cut_off_up = gene_cutoffs_up[gene_id]
-
-            voted_classes = np.zeros(n_samples, dtype=int)
-            for pert_i in gene_locations[0]:
-                voted_classes[pert_i] = get_class_vote(y_pert_lists[pert_i], class_cut_off_down, class_cut_off_up)
-
-            down_locations = np.where(voted_classes == 1)
-            mid_locations = np.where(voted_classes == 2)
-            up_locations = np.where(voted_classes == 3)
-
-            npY_class_down[down_locations] = 1  # set all down class locations to be active
-            npY_class_up[up_locations] = 1  # set all up class locations to be active
-
-        print('Positive samples down', str(len(down_locations)))
-        print('Positive samples up', str(len(up_locations)))
-        num_drugs = cell_drugs_counts
-        print("Sample Size:", n_samples, "Drugs tested:", num_drugs / gene_count_data_limit)
-
-        # save the data to be loaded and used multiple times if needed
+    load_data_folder_path = "TrainData/"
+    save_models_folder_path = "SavedModels/"
+    percentiles = [5]
+    for target_cell_name in target_cell_names:
         for direction in ["Down", "Up"]:
-            model_file_prefix = save_xy_path + 'deepCop_' + target_cell_name + '_' + direction + '_' + \
-                                str(dosage) + 'd_' + str(percentile_down) + 'p'
+            for percentile_down in percentiles:
+                file_suffix = target_cell_name + '_' + direction + '_' + str(percentile_down) + 'p'
+                model_file_prefix = save_models_folder_path + file_suffix
+                print('load location', load_data_folder_path)
+                print('save location', model_file_prefix)
+                npX = np.load(load_data_folder_path + file_suffix + "_X.npz")['arr_0']
+                npY_class = np.load(load_data_folder_path + file_suffix + "_Y_class.npz")['arr_0']
+                do_validation(npX, npY_class, model_file_prefix)
 
-            save_file = model_file_prefix + "_npX"
-            print("saved", save_file)
-            np.savez(save_file, npX)
-
-            save_file = model_file_prefix + "_npY_class"
-            print("saved", save_file)
-            npY = npY_class_up if direction == "up" else npY_class_down
-            np.savez(save_file, npY)
+load_and_validate()
