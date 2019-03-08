@@ -6,11 +6,10 @@ from Helpers.data_loader import get_feature_dict, load_gene_expression_data, pri
 
 start_time = time.time()
 gene_count_data_limit = 978
-# target_cell_names = ['VCAP', 'A549', 'A375', 'PC3', 'MCF7', 'HT29']
-target_cell_names = ['PC3']
+target_cell_names = ['LNCAP']
 test_blind = True
 save_xy_path = "TrainData/"
-LINCS_data_path = "/data/datasets/gwoo/L1000/LDS-1191/Data/"  # set this path to your LINCS gctx file
+LINCS_data_path = "/data/datasets/gwoo/L1000/LDS-1484/Data/"  # set this path to your LINCS gctx file
 data_path = "Data/"
 gap_factors = [0.0]
 significance_levels = [5]
@@ -58,20 +57,28 @@ def get_class_vote(pert_list, bottom_threshold, top_threshold):
         return highest_vote_class
 
 
+def get_their_id(good_id):
+    return 'b\'' + good_id + '\''
+
+
+def get_our_id(bad_id):
+    return bad_id[2:-1]
+
+
 # get the dictionaries
 print(datetime.datetime.now(), "Loading drug and gene features")
-drug_features_dict = get_feature_dict('Data/phase1_compounds_morgan_2048.csv')
+drug_features_dict = get_feature_dict('Data/phase2_compounds_morgan_2048.csv')
 gene_features_dict = get_feature_dict('Data/go_fingerprints.csv')
-cell_name_to_id_dict = get_feature_dict('Data/Phase1_Cell_Line_Metadata.txt', '\t', 2)
-experiments_dose_dict = get_feature_dict(LINCS_data_path + 'GSE92742_Broad_LINCS_sig_info.txt', '\t', 0)
+cell_name_to_id_dict = get_feature_dict('Data/Phase2_Cell_Line_Metadata.txt', '\t', 2)
+experiments_dose_dict = get_feature_dict(LINCS_data_path + 'GSE70138_Broad_LINCS_sig_info.txt', '\t', 0)
 gene_id_dict = get_gene_id_dict()
 
 lm_gene_entrez_ids = []
 for gene in gene_id_dict:
-    lm_gene_entrez_ids.append(gene)
+    lm_gene_entrez_ids.append(get_their_id(gene))
 
 print("Loading gene expressions from gctx")
-level_5_gctoo = load_gene_expression_data(LINCS_data_path + "GSE92742_Broad_LINCS_Level5_COMPZ.MODZ_n473647x12328.gctx",
+level_5_gctoo = load_gene_expression_data(LINCS_data_path + "GSE70138_Broad_LINCS_Level5_COMPZ_n118050x12328.gctx",
                                           lm_gene_entrez_ids)
 length = len(level_5_gctoo.col_metadata_df.index)
 # length = 10000
@@ -110,12 +117,12 @@ for target_cell_name in target_cell_names:
         drug_features = drug_features_dict[drug_id]
 
         # parse the dosage unit and value
-        dose_unit = experiment_data[5]
-        if dose_unit != 'µM':
+        dose_unit = experiment_data[4][-2:]
+        if dose_unit != 'um':
             # remove any dosages that are not 'µM'. Want to standardize the dosages.
             # column counts: -666 17071, % 2833, uL 238987, uM 205066, ng 1439, ng / uL 2633, ng / mL 5625
             continue
-        dose_amt = float(experiment_data[4])
+        dose_amt = float(experiment_data[4][:-2])
         if dose_amt < dosage - 0.1 or dose_amt > dosage + 0.1:  # 10µM +/- 0.1
             continue
 
@@ -131,19 +138,20 @@ for target_cell_name in target_cell_names:
         cell_id = cell_name_to_id_dict[cell_name][0]
 
         for gene_id in lm_gene_entrez_ids:
-            gene_symbol = gene_id_dict[gene_id]
+            our_gene_id = get_our_id(gene_id)
+            gene_symbol = gene_id_dict[our_gene_id]
 
             if gene_symbol not in gene_features_dict:
                 continue
 
             pert = column[gene_id].astype('float16')
             # repeat key is used to find the largest perturbation for similar experiments and filter out the rest
-            repeat_key = drug_id + "_" + gene_id
+            repeat_key = drug_id + "_" + our_gene_id
 
             if repeat_key not in cell_X:
                 cell_X[repeat_key] = drug_features + gene_features_dict[gene_symbol]
                 cell_Y[repeat_key] = []
-                cell_Y_gene_ids.append(gene_id)
+                cell_Y_gene_ids.append(our_gene_id)
                 cell_drugs_counts += 1
             cell_Y[repeat_key].append(pert)
 
@@ -161,11 +169,14 @@ for target_cell_name in target_cell_names:
         # get all the global gene_specific_cutoffs:
         prog_ctr = 0
         for gene_id in lm_gene_entrez_ids:
-            row = level_5_gctoo.data_df.loc[gene_id, :].values
             prog_ctr += 1
             printProgressBar(prog_ctr, gene_count_data_limit, prefix='Storing percentile cutoffs')
-            gene_cutoffs_down[gene_id] = np.percentile(row, percentile_down)
-            gene_cutoffs_up[gene_id] = np.percentile(row, percentile_up)
+            our_gene_id = get_our_id(gene_id)
+            their_gene_id = gene_id
+
+            row = level_5_gctoo.data_df.loc[their_gene_id, :].values
+            gene_cutoffs_down[our_gene_id] = np.percentile(row, percentile_down)
+            gene_cutoffs_up[our_gene_id] = np.percentile(row, percentile_up)
 
         # get voting class
         print(datetime.datetime.now(), "Converting dictionary values to numpy array, count", str(len(cell_X)))
@@ -182,9 +193,10 @@ for target_cell_name in target_cell_names:
         for gene_id in lm_gene_entrez_ids:  # this section is for gene specific class cutoffs
             prog_ctr += 1
             printProgressBar(prog_ctr, gene_count_data_limit, prefix='Marking positive pertubations')
-            gene_locations = np.where(npY_gene_ids == gene_id)
-            class_cut_off_down = gene_cutoffs_down[gene_id]
-            class_cut_off_up = gene_cutoffs_up[gene_id]
+            our_gene_id = get_our_id(gene_id)
+            gene_locations = np.where(npY_gene_ids == our_gene_id)
+            class_cut_off_down = gene_cutoffs_down[our_gene_id]
+            class_cut_off_up = gene_cutoffs_up[our_gene_id]
 
             voted_classes = np.zeros(n_samples, dtype=int)
             for pert_i in gene_locations[0]:
@@ -203,12 +215,13 @@ for target_cell_name in target_cell_names:
         print("Sample Size:", n_samples, "Drugs tested:", num_drugs / gene_count_data_limit)
 
         # save the data to be loaded and used multiple times if needed
-        model_file_prefix = save_xy_path + target_cell_name + '_' + direction + '_' + str(percentile_down) + 'p'
+        model_file_prefix = save_xy_path + target_cell_name + '_' + str(percentile_down) + 'p'
         save_file = model_file_prefix + "_X"
         print("saved", save_file)
         np.savez(save_file, npX)
 
         for direction in ["Down", "Up"]:
+            model_file_prefix = save_xy_path + target_cell_name + '_' + direction + '_' + str(percentile_down) + 'p'
             save_file = model_file_prefix + "_Y_class"
             print("saved", save_file)
             npY = npY_class_up if direction == "up" else npY_class_down
