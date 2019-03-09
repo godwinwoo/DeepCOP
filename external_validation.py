@@ -128,6 +128,11 @@ def print_acc(text, Y_train, y_pred_train):
     report = metrics.classification_report(y_true, y_pred)
     print("Report", report)
 
+    tokens = report.split()
+    support = int(tokens[13])
+    total = int(tokens[20])
+    return support, total
+
 
 def print_stats(y_true, param, dir, predictions, cutoff=None):
     val_stats = all_stats(np.asarray(y_true, dtype='float32'), predictions[:, 1], cutoff)
@@ -135,7 +140,12 @@ def print_stats(y_true, param, dir, predictions, cutoff=None):
     print(label)
     print('All stats columns | AUC | Recall | Specificity | Number of Samples | Precision | Max F Cutoff | Max F Score')
     print('All stats val:', ['{:6.3f}'.format(val) for val in val_stats])
-    print_acc(label, np.asarray(y_true, dtype='float32'), predictions)
+    support, total = print_acc(label, np.asarray(y_true, dtype='float32'), predictions)
+    auc = float(val_stats[0])
+    maxfscore = float(val_stats[6])
+    precision = float(val_stats[4])
+    ef = precision / (support / total)
+    return auc, maxfscore, ef
 
 
 def compare_predictions_with_rnaseq(up_model_filename, down_model_filename, upcutoff, downcutoff):
@@ -160,22 +170,46 @@ def compare_predictions_with_rnaseq(up_model_filename, down_model_filename, upcu
     up_true_float, down_true_float, up_true_int, down_true_int = \
         get_true_from_padj(drugs, genes, lincs_to_rnaseq_gene, rnaseq_data, significance_level)
 
-    print_stats(up_true_int, significance_level, "up", up_predictions, upcutoff)
-    print_stats(down_true_int, significance_level, "down", down_predictions, downcutoff)
+    up_auc, up_fscore, up_ef = print_stats(up_true_int, significance_level, "up", up_predictions, upcutoff)
+    down_auc, down_fscore, down_ef  = print_stats(down_true_int, significance_level, "down", down_predictions, downcutoff)
+    return up_auc, down_auc, up_fscore, down_fscore, up_ef, down_ef
 
 
-def get_average_of_10_models():
+def get_average_of_10_saved_models():
     up_file_prefix = "SavedModels/LNCAP_Up_5p_"
     down_file_prefix = "SavedModels/LNCAP_Down_5p_"
     up_cutoffs = np.load(up_file_prefix + "cutoffs.npz")['arr_0']
     down_cutoffs = np.load(down_file_prefix + "cutoffs.npz")['arr_0']
 
+    up_aucs = []
+    down_aucs = []
+    up_fscores = []
+    down_fscores = []
+    up_efs = []
+    down_efs = []
     for i in range(0, 10):
-        up_model_filename = up_file_prefix + str(i+1)
-        down_model_filename = down_file_prefix + str(i+1)
+        count = i+1
+        up_model_filename = up_file_prefix + str(count)
+        down_model_filename = down_file_prefix + str(count)
         upcutoff = up_cutoffs[i]
         downcutoff = down_cutoffs[i]
-        compare_predictions_with_rnaseq(up_model_filename, down_model_filename, upcutoff, downcutoff)
+        up_auc, down_auc, up_fscore, down_fscore, up_ef, down_ef = compare_predictions_with_rnaseq(
+            up_model_filename, down_model_filename, upcutoff, downcutoff)
+
+        up_aucs.append(up_auc)
+        down_aucs.append(down_auc)
+        up_fscores.append(up_fscore)
+        down_fscores.append(down_fscore)
+        up_efs.append(up_ef)
+        down_efs.append(down_ef)
+
+        print("running values", i + 1,
+              "up auc", sum(up_aucs) / count,
+              "down auc", sum(down_aucs) / count,
+              "up maxf", sum(up_fscores) / count,
+              "down maxf", sum(down_fscores) / count,
+              "up Ef", sum(up_efs) / count,
+              "down Ef", sum(down_efs) / count)
 
 
-get_average_of_10_models()
+get_average_of_10_saved_models()
