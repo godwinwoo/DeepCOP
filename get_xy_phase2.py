@@ -3,13 +3,17 @@ import json
 import time
 import numpy as np
 from Helpers.data_loader import get_feature_dict, load_gene_expression_data, printProgressBar
+import sys
 
 start_time = time.time()
 gene_count_data_limit = 978
 target_cell_names = ['LNCAP']
 test_blind = True
 save_xy_path = "TrainData/"
-LINCS_data_path = "/data/datasets/gwoo/L1000/LDS-1484/Data/"  # set this path to your LINCS gctx file
+LINCS_data_path = ""  # set this path to your LINCS gctx file
+if LINCS_data_path == "":
+    print("You need to set the LINCS data path")
+    sys.exit()
 data_path = "Data/"
 gap_factors = [0.0]
 significance_levels = [5]
