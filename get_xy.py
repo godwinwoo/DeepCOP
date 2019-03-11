@@ -8,10 +8,10 @@ import sys
 start_time = time.time()
 gene_count_data_limit = 978
 # target_cell_names = ['VCAP', 'A549', 'A375', 'PC3', 'MCF7', 'HT29']
-target_cell_names = ['PC3']
+target_cell_names = ['HT29']
 test_blind = True
 save_xy_path = "TrainData/"
-LINCS_data_path = ""  # set this path to your LINCS gctx file
+LINCS_data_path = "/data/datasets/gwoo/L1000/LDS-1191/Data/"  # set this path to your LINCS gctx file
 if LINCS_data_path == "":
     print("You need to set the LINCS data path")
     sys.exit()
@@ -207,7 +207,7 @@ for target_cell_name in target_cell_names:
         print("Sample Size:", n_samples, "Drugs tested:", num_drugs / gene_count_data_limit)
 
         # save the data to be loaded and used multiple times if needed
-        model_file_prefix = save_xy_path + target_cell_name + '_' + direction + '_' + str(percentile_down) + 'p'
+        model_file_prefix = save_xy_path + target_cell_name + '_' + str(percentile_down) + 'p'
         save_file = model_file_prefix + "_X"
         print("saved", save_file)
         np.savez(save_file, npX)
