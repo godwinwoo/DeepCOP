@@ -213,6 +213,7 @@ for target_cell_name in target_cell_names:
         np.savez(save_file, npX)
 
         for direction in ["Down", "Up"]:
+            model_file_prefix = save_xy_path + target_cell_name + '_' + direction + '_' + str(percentile_down) + 'p'
             save_file = model_file_prefix + "_Y_class"
             print("saved", save_file)
             npY = npY_class_up if direction == "up" else npY_class_down
