@@ -9,6 +9,7 @@ from keras.layers.normalization import BatchNormalization
 from keras.callbacks import History, EarlyStopping
 from sklearn.model_selection import train_test_split, KFold
 import sklearn.metrics as metrics
+from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 import os
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"  # choose the gpu to use in multi gpu system
 
@@ -129,11 +130,79 @@ def do_validation(data, labels, model_file_prefix):
               'enrichment', sum_ef / count)
     np.savez(model_file_prefix + '_cutoffs', np.asarray(cutoffs))
 
-def load_and_validate():
-    # target_cell_names = ['VCAP', 'A549', 'A375', 'PC3', 'MCF7', 'HT29', 'LNCAP']
-    target_cell_names = ['LNCAP']  # choose the cell line(s) to do x10
 
-    load_data_folder_path = "TrainData/"
+def do_validation_rf(data, labels):
+    nb_classes = 2
+    n_splits = 10
+
+    labels = np_utils.to_categorical(labels, nb_classes)
+    kf = KFold(n_splits=n_splits, shuffle=True)
+    sum_auc = 0
+    count = 0
+    sum_prec = 0
+    sum_fscore = 0
+    sum_ef = 0
+    cutoffs = []
+    for train_indexes, test_indexes in kf.split(data):
+        count += 1
+        print("TRAIN:", train_indexes, "TEST:", test_indexes)
+
+        # take half of the test data as validation
+        X_train = data[train_indexes]
+        Y_train = labels[train_indexes]
+        X_test = data[test_indexes]
+        Y_test = labels[test_indexes]
+
+        model = RandomForestClassifier(n_estimators=40, n_jobs=40, verbose=1)
+
+        # train the model
+        model.fit(X_train, Y_train)
+
+        # reporting
+
+        # get results and report
+        y_pred_train = model.predict(X_train)
+        y_pred_test = model.predict(X_test)
+
+        # report accuracy
+        y_pred = np.argmax(y_pred_test, axis=1)
+        y_true = np.argmax(Y_test, axis=1)
+        report = metrics.classification_report(y_true, y_pred)
+        print("Test Report", report)
+
+        # report auc
+        train_stats = all_stats(Y_train[:, 1], y_pred_train[:, 1])
+        test_stats = all_stats(Y_test[:, 1], y_pred_test[:, 1])
+        print('All stats columns | AUC | Recall | Specificity | Number of Samples | Precision | Max F Cutoff | Max F score')
+        print('All stats train:', ['{:6.3f}'.format(val) for val in train_stats])
+        print('All stats test:', ['{:6.3f}'.format(val) for val in test_stats])
+
+        # get enrichment factor
+        precision = float(test_stats[4])
+        tokens = report.split()
+        support = int(tokens[13])
+        total = int(tokens[20])
+        ef = precision / (support/total)
+
+        cutoffs.append(float(test_stats[5]))
+
+        # get average
+        sum_auc += test_stats[0]
+        sum_prec += test_stats[4]
+        sum_fscore += test_stats[6]
+        sum_ef += ef
+
+        print("running kfold auc", count, sum_auc / count,
+              'prec', sum_prec / count,
+              'fscore', sum_fscore / count,
+              'enrichment', sum_ef / count)
+
+
+def load_and_validate():
+    target_cell_names = ['VCAP', 'A549', 'A375', 'PC3', 'MCF7', 'HT29', 'LNCAP']
+    # target_cell_names = ['LNCAP']  # choose the cell line(s) to do x10
+
+    load_data_folder_path = "TrainData/5p/"
     save_models_folder_path = "SavedModels/"
     percentiles = [5]
     for target_cell_name in target_cell_names:
@@ -146,6 +215,7 @@ def load_and_validate():
                 print('load location', load_data_folder_path)
                 print('save location', model_file_prefix)
                 npY_class = np.load(load_data_folder_path + file_suffix + "_Y_class.npz")['arr_0']
-                do_validation(npX, npY_class, model_file_prefix)
+                # do_validation(npX, npY_class, model_file_prefix)
+                do_validation_rf(npX, npY_class)
 
 load_and_validate()
