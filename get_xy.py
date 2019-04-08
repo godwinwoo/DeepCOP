@@ -100,7 +100,7 @@ for target_cell_name in target_cell_names:
         start = col_name.rfind("_")
         end = find_nth(col_name, ":", 1)
         exposure_time = col_name[start + 1:end]
-        if exposure_time != "24H":  # column counts: 6h 95219, 24h 109287, 48h 58, 144h 1
+        if exposure_time != "24H":  # column counts: 6h 102282, 24h 118597, 48h 1453, 144h 18487, 3h 612
             continue
 
         # get drug features

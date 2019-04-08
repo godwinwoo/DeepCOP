@@ -4,6 +4,8 @@ from Helpers.data_loader import get_feature_dict, load_csv
 from keras.models import model_from_json
 from Helpers.utilities import all_stats
 import sklearn.metrics as metrics
+import os
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 lincs_to_rnaseq_gene = {
         'PAPD7': 'TENT4A',
@@ -48,6 +50,9 @@ def get_predictions(up_model_filename, down_model_filename):
     # build your input features
     gene_features_dict = get_feature_dict("Data/go_fingerprints.csv")
     drug_features_dict = get_feature_dict("Data/inhouse_morgan_2048.csv")
+    #drug_features_dict.pop("Enzalutamide")
+    #drug_features_dict.pop("VPC14449")
+    # drug_features_dict.pop("VPC17005")
 
     data = []
     descriptions = []
@@ -145,7 +150,9 @@ def print_stats(y_true, param, dir, predictions, cutoff=None):
     maxfscore = float(val_stats[6])
     precision = float(val_stats[4])
     ef = precision / (support / total)
-    return auc, maxfscore, ef
+    recall = float(val_stats[1])
+    cutoff_pred = float(val_stats[5])
+    return auc, maxfscore, ef, precision, recall, cutoff_pred
 
 
 def compare_predictions_with_rnaseq(up_model_filename, down_model_filename, upcutoff, downcutoff):
@@ -170,16 +177,20 @@ def compare_predictions_with_rnaseq(up_model_filename, down_model_filename, upcu
     up_true_float, down_true_float, up_true_int, down_true_int = \
         get_true_from_padj(drugs, genes, lincs_to_rnaseq_gene, rnaseq_data, significance_level)
 
-    up_auc, up_fscore, up_ef = print_stats(up_true_int, significance_level, "up", up_predictions, upcutoff)
-    down_auc, down_fscore, down_ef  = print_stats(down_true_int, significance_level, "down", down_predictions, downcutoff)
-    return up_auc, down_auc, up_fscore, down_fscore, up_ef, down_ef
+    up_auc, up_fscore, up_ef, up_prec, up_recall, up_cutoff_pred = print_stats(up_true_int, significance_level, "up", up_predictions,
+                                                               upcutoff)
+    down_auc, down_fscore, down_ef, down_prec, down_recall, down_cutoff_pred = print_stats(down_true_int, significance_level, "down",
+                                                                         down_predictions, downcutoff)
+    return up_auc, down_auc, up_fscore, down_fscore, up_ef, down_ef, up_prec, down_prec, up_recall, down_recall, up_cutoff_pred, down_cutoff_pred
 
 
 def get_average_of_10_saved_models():
-    up_file_prefix = "SavedModels/LNCAP_Up_5p_"
-    down_file_prefix = "SavedModels/LNCAP_Down_5p_"
+    up_file_prefix = "SavedModels/3h/LNCAP_Up_5p_"
+    down_file_prefix = "SavedModels/3h/LNCAP_Down_5p_"
     up_cutoffs = np.load(up_file_prefix + "cutoffs.npz")['arr_0']
     down_cutoffs = np.load(down_file_prefix + "cutoffs.npz")['arr_0']
+    print("average up cutoffs", sum(up_cutoffs) / 10)
+    print("average down cutoffs", sum(down_cutoffs) / 10)
 
     up_aucs = []
     down_aucs = []
@@ -187,14 +198,21 @@ def get_average_of_10_saved_models():
     down_fscores = []
     up_efs = []
     down_efs = []
+    up_precs = []
+    down_precs = []
+    up_recalls = []
+    down_recalls = []
+    up_cutoffs_preds = []
+    down_cutoffs_preds = []
+
     for i in range(0, 10):
         count = i+1
         up_model_filename = up_file_prefix + str(count)
         down_model_filename = down_file_prefix + str(count)
         upcutoff = up_cutoffs[i]
         downcutoff = down_cutoffs[i]
-        up_auc, down_auc, up_fscore, down_fscore, up_ef, down_ef = compare_predictions_with_rnaseq(
-            up_model_filename, down_model_filename, upcutoff, downcutoff)
+        up_auc, down_auc, up_fscore, down_fscore, up_ef, down_ef, up_prec, down_prec, up_recall, down_recall, up_cutoffs_pred, down_cutoffs_pred = \
+            compare_predictions_with_rnaseq(up_model_filename, down_model_filename, upcutoff, downcutoff)
 
         up_aucs.append(up_auc)
         down_aucs.append(down_auc)
@@ -202,6 +220,12 @@ def get_average_of_10_saved_models():
         down_fscores.append(down_fscore)
         up_efs.append(up_ef)
         down_efs.append(down_ef)
+        up_precs.append(up_prec)
+        down_precs.append(down_prec)
+        up_recalls.append(up_recall)
+        down_recalls.append(down_recall)
+        up_cutoffs_preds.append(up_cutoffs_pred)
+        down_cutoffs_preds.append(down_cutoffs_pred)
 
         print("running values", i + 1,
               "up auc", sum(up_aucs) / count,
@@ -209,7 +233,12 @@ def get_average_of_10_saved_models():
               "up maxf", sum(up_fscores) / count,
               "down maxf", sum(down_fscores) / count,
               "up Ef", sum(up_efs) / count,
-              "down Ef", sum(down_efs) / count)
-
+              "down Ef", sum(down_efs) / count,
+              "up Prec", sum(up_precs) / count,
+              "down Prec", sum(down_precs) / count,
+              "up Recall", sum(up_recalls) / count,
+              "down Recall", sum(down_recalls) / count,
+              "up Cutoff", sum(up_cutoffs_preds) / count,
+              "down Cutoff", sum(down_cutoffs_preds) / count)
 
 get_average_of_10_saved_models()
