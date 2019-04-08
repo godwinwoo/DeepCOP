@@ -24,3 +24,4 @@ Uncompress these files in the same folder.
 Extra:<br>
     * We used [gene_descriptors.r](Extra/gene_descriptors.r) to compute gene descriptors. This was done using R. <br>
     * [rdkit_fingerprint.py](Extra/rdkit_fingerprint.py) was used to compute morgan fingerprints.
+    * [application_domain.py](application_domain.py) was used to plot the Jaccard similarities
