@@ -65,12 +65,12 @@ def remove_corr_features(all_features):
 
 def get_uncorr_drug_features(include_rnaseq=True):
     # first get the compounds that are from the LINCS dataset
-    drug_features_dict = get_feature_dict('Data/LDS1484_compounds_morgan_2048_nk.csv')  # , use_int=True)
+    drug_features_dict = get_feature_dict('Data/phase2_compounds_morgan_2048.csv')  # , use_int=True)
     drug_features_dict = remove_non_lncap(drug_features_dict)
 
     # add the compounds that were in RNAseq
     if include_rnaseq:
-        rnaseq_drugs = get_feature_dict('Data/rnaseq_morgan_2048_nk.csv')
+        rnaseq_drugs = get_feature_dict('Data/inhouse_morgan_2048.csv')
         for rnaseq_drug in rnaseq_drugs:
             drug_features_dict[rnaseq_drug] = rnaseq_drugs[rnaseq_drug]
 
@@ -81,7 +81,7 @@ def get_uncorr_drug_features(include_rnaseq=True):
 
 
 def get_jaccard_score_of_rnaseq_drug(drug_id, lincs_drugs):
-    rnaseq_drugs = get_feature_dict('Data/rnaseq_morgan_2048_nk.csv')
+    rnaseq_drugs = get_feature_dict('Data/inhouse_morgan_2048.csv')
 
     rnaseq_drug = rnaseq_drugs[drug_id]
     rnaseq_drug = np.reshape(np.array(rnaseq_drug, np.float16), (1, -1))

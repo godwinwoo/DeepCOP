@@ -36,13 +36,14 @@ names = []
 import os
 path = os.path.dirname(os.path.abspath(__file__))
 print(path)
-drug_dict = get_feature_dict('GSE92742_Broad_LINCS_pert_info.txt', delimiter='\t', use_int=False) # change for phase 2
+drug_dict = get_feature_dict('GSE92742_Broad_LINCS_pert_info.txt', delimiter='\t', use_int=False) # uncomment for phase 1
+# drug_dict = get_feature_dict('GSE70138_Broad_LINCS_pert_info.txt', delimiter='\t', use_int=False) # uncomment for phase 2
 
-# rnaseq drugs
-drug_dict = {}
-drug_dict['Enzalutamide'] = ['','','','','','CNC(=O)C1=C(F)C=C(C=C1)N1C(=S)N(C(=O)C1(C)C)C1=CC=C(C#N)C(=C1)C(F)(F)F']
-drug_dict['VPC14449'] = ['','','','','','Brc1n(-c2nc(N3CCOCC3)sc2)cc(Br)n1']
-drug_dict['VPC17005'] = ['','','','','','O=C(NC=1SCCN=1)c1c2c(sc1)cccc2']
+# rnaseq drugs # uncomment this and change filename below to get inhouse_morgan_2048.csv
+# drug_dict = {}
+# drug_dict['Enzalutamide'] = ['','','','','','CNC(=O)C1=C(F)C=C(C=C1)N1C(=S)N(C(=O)C1(C)C)C1=CC=C(C#N)C(=C1)C(F)(F)F']
+# drug_dict['VPC14449'] = ['','','','','','Brc1n(-c2nc(N3CCOCC3)sc2)cc(Br)n1']
+# drug_dict['VPC17005'] = ['','','','','','O=C(NC=1SCCN=1)c1c2c(sc1)cccc2']
 
 count = 0
 for key in drug_dict:
@@ -69,4 +70,4 @@ id = id.reshape(len(fps), 1)
 data = np.hstack((id, fps))
 header = np.array(header).reshape(1, len(header))
 data_header = np.vstack((header, data))
-np.savetxt("morgan_2048.csv", data_header, delimiter=",", fmt="%s")
+np.savetxt("phase1_compounds_morgan_2048.csv", data_header, delimiter=",", fmt="%s")
