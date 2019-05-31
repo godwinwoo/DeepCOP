@@ -1,4 +1,4 @@
-# DeepCOP
+# DeepCOP - Deep gene COmpound Profiler
 
 1. Download and uncompress the level 5 gctx data files and experiment metadata from GEO
    * Phase 1: https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE92742
@@ -23,5 +23,5 @@ Uncompress these files in the same folder.
 
 Extra:<br>
     * We used [gene_descriptors.r](Extra/gene_descriptors.r) to compute gene descriptors. This was done using R. <br>
-    * [rdkit_fingerprint.py](Extra/rdkit_fingerprint.py) was used to compute morgan fingerprints.
+    * [rdkit_fingerprint.py](Extra/rdkit_fingerprint.py) was used to compute morgan fingerprints. <br>
     * [application_domain.py](application_domain.py) was used to plot the Jaccard similarities
