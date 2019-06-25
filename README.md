@@ -27,6 +27,6 @@ Uncompress these files in the same folder.
     * When evaluating the predictions, cutoff values from step 4 will be used.
 
 ## Extra
-    * We used [gene_descriptors.r](Extra/gene_descriptors.r) to compute gene descriptors. This was done using R. <br>
-    * [rdkit_fingerprint.py](Extra/rdkit_fingerprint.py) was used to compute morgan fingerprints. <br>
-    * [application_domain.py](application_domain.py) was used to plot the Jaccard similarities
+  * We used [gene_descriptors.r](Extra/gene_descriptors.r) to compute gene descriptors. This was done using R. <br>
+  * [rdkit_fingerprint.py](Extra/rdkit_fingerprint.py) was used to compute morgan fingerprints. <br>
+  * [application_domain.py](application_domain.py) was used to plot the Jaccard similarities
