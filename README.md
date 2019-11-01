@@ -1,5 +1,7 @@
 # DeepCOP - Deep gene COmpound Profiler
 
+This is the codebase that was used to obtain the results in the corresponding paper: https://www.ncbi.nlm.nih.gov/pubmed/31504186.
+
 Use steps 1-4 to train and validate an MLP model to predict the gene expression of a gene given a molecule on a particular cell line of the LINCS L1000 dataset. Step 5 is used to evaluate the trained models against actual RNA-Seq values.
 
 ## Data Preparation
